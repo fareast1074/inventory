@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mobile Inventory Scanner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f2f4f8;
+    margin: 0;
+    padding-bottom: 90px;
+}
+
+header {
+    background: #1976d2;
+    color: white;
+    padding: 16px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.card {
+    background: white;
+    margin: 12px;
+    padding: 16px;
+    border-radius: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.08);
+}
+
+button {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.btn-scan {
+    background: #4caf50;
+    color: white;
+}
+
+.btn-save {
+    background: #1976d2;
+    color: white;
+    margin-top: 10px;
+}
+
+.btn-export {
+    background: #ff9800;
+    color: white;
+}
+
+input {
+    width: 100%;
+    padding: 12px;
+    margin-top: 10px;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    font-size: 16px;
+}
+
+#scanner {
+    width: 100%;
+    height: 240px;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 10px;
+    background: black;
+}
+
+.list-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+}
+
+.list-item:last-child { border-bottom: none; }
+
+.qty {
+    font-weight: bold;
+}
+
+.bottom-bar {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    background: white;
+    padding: 12px;
+    box-shadow: 0 -3px 10px rgba(0,0,0,.15);
+}
+</style>
+</head>
+
+<body>
+
+<header>📦 Inventory Scanner</header>
+
+<div class="card">
+    <button class="btn-scan" onclick="startScanner()">📷 Scan Barcode</button>
+    <div id="scanner"></div>
+
+    <input id="barcode" placeholder="Barcode">
+    <input id="name" placeholder="Item name">
+    <input id="qty" type="number" placeholder="Quantity">
+    <button class="btn-save" onclick="saveItem()">💾 Save Item</button>
+</div>
+
+<div class="card">
+    <h4>📋 Inventory List</h4>
+    <div id="list"></div>
+</div>
+
+<div class="bottom-bar">
+    <button class="btn-export" onclick="exportCSV()">📄 Export CSV</button>
+</div>
+
+<script>
+let inventory = JSON.parse(localStorage.getItem("inventory")) || [];
+renderList();
+
+function startScanner() {
+    Quagga.init({
+        inputStream: {
+            type: "LiveStream",
+            target: document.querySelector('#scanner'),
+            constraints: { facingMode: "environment" }
+        },
+        decoder: {
+            readers: ["code_128_reader", "ean_reader", "upc_reader"]
+        }
+    }, err => {
+        if (!err) Quagga.start();
+    });
+
+    Quagga.onDetected(data => {
+        barcode.value = data.codeResult.code;
+        Quagga.stop();
+    });
+}
+
+function saveItem() {
+    inventory.push({
+        barcode: barcode.value,
+        name: name.value,
+        qty: qty.value,
+        date: new Date().toLocaleString()
+    });
+
+    localStorage.setItem("inventory", JSON.stringify(inventory));
+    renderList();
+
+    barcode.value = name.value = qty.value = "";
+}
+
+function renderList() {
+    let html = "";
+    inventory.forEach(i => {
+        html += `
+        <div class="list-item">
+            <div>
+                <div>${i.name || "Unnamed"}</div>
+                <small>${i.barcode}</small>
+            </div>
+            <div class="qty">x${i.qty}</div>
+        </div>`;
+    });
+    list.innerHTML = html;
+}
+
+function exportCSV() {
+    if (!inventory.length) return alert("No data");
+
+    let csv = "Barcode,Item Name,Quantity,Date\n";
+    inventory.forEach(i => {
+        csv += `${i.barcode},${i.name},${i.qty},${i.date}\n`;
+    });
+
+    let blob = new Blob([csv], { type: "text/csv" });
+    let a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "inventory.csv";
+    a.click();
+}
+</script>
+
+</body>
+</html>
