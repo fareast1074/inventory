@@ -1,80 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Equipment Log</title>
+
+<style>
+body { font-family: Arial; padding: 15px; }
+.card { background:#f5f5f5; padding:15px; border-radius:10px; }
+button { width:100%; padding:12px; margin-top:10px; font-size:16px; }
+</style>
+</head>
+
+<body>
+
+<h3>Equipment Scan</h3>
+
+<div class="card">
+    <input id="scan" placeholder="SCAN RESULT" style="width:100%;padding:10px">
+
+    <label><input type="checkbox" id="due"> DUE</label><br>
+    <label><input type="checkbox" id="code"> EQUIPMENT CODE</label><br>
+    <label><input type="checkbox" id="location"> LOCATION</label><br>
+
+    <button onclick="confirm()">CONFIRM</button>
+    <button onclick="exportTXT()">EXPORT FILE</button>
+</div>
+
 <script>
-let inventory = JSON.parse(localStorage.getItem("inventory")) || [];
-renderList();
+let logData = [];
 
-let scanning = false;
-let stream;
+function confirm() {
 
-async function startScanner() {
+    let due = document.getElementById("due").checked ? 1 : 0;
+    let code = document.getElementById("code").checked ? 1 : 0;
+    let location = document.getElementById("location").checked ? 1 : 0;
 
-    if (!('BarcodeDetector' in window)) {
-        alert("Your browser does not support BarcodeDetector. Use Chrome.");
+    let line =
+        "SCAN RESULT: " + scan.value +
+        " | DUE: " + due +
+        " | EQUIPMENT CODE: " + code +
+        " | LOCATION: " + location;
+
+    logData.push(line);
+
+    alert("Saved:\n" + line);
+
+    scan.value = "";
+    due.checked = code.checked = location.checked = false;
+}
+
+function exportTXT() {
+    if (logData.length === 0) {
+        alert("No data");
         return;
     }
 
-    if (scanning) return;
-    scanning = true;
-
-    const barcodeDetector = new BarcodeDetector({
-        formats: ['ean_13','ean_8','code_128','upc_a','upc_e']
-    });
-
-    stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" }
-    });
-
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    video.setAttribute("playsinline", true);
-    video.play();
-
-    document.getElementById("scanner").innerHTML = "";
-    document.getElementById("scanner").appendChild(video);
-
-    const scanLoop = async () => {
-        if (!scanning) return;
-
-        const barcodes = await barcodeDetector.detect(video);
-        if (barcodes.length > 0) {
-            barcode.value = barcodes[0].rawValue;
-            stopScanner();
-            return;
-        }
-        requestAnimationFrame(scanLoop);
-    };
-
-    scanLoop();
-}
-
-function stopScanner() {
-    scanning = false;
-    if (stream) stream.getTracks().forEach(t => t.stop());
-}
-
-function saveItem() {
-    inventory.push({
-        barcode: barcode.value,
-        name: name.value,
-        qty: qty.value,
-        date: new Date().toLocaleString()
-    });
-    localStorage.setItem("inventory", JSON.stringify(inventory));
-    renderList();
-    barcode.value = name.value = qty.value = "";
-}
-
-function renderList() {
-    let html = "";
-    inventory.forEach(i => {
-        html += `
-        <div class="list-item">
-            <div>
-                <div>${i.name || "Unnamed"}</div>
-                <small>${i.barcode}</small>
-            </div>
-            <div class="qty">x${i.qty}</div>
-        </div>`;
-    });
-    list.innerHTML = html;
+    let blob = new Blob([logData.join("\n")], { type: "text/plain" });
+    let a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "equipment_log.txt";
+    a.click();
 }
 </script>
+
+</body>
+</html>
