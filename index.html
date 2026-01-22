@@ -1,67 +1,461 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Equipment Log</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>QC Audit Pro - Calibration Inventory</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        :root { 
+            --primary: #00e5ff; 
+            --primary-glow: rgba(0, 229, 255, 0.4);
+            --success: #00e676; 
+            --danger: #ff1744; 
+            --bg: #050a14; 
+            --card-bg: rgba(10, 25, 47, 0.85);
+        }
 
-<style>
-body { font-family: Arial; padding: 15px; }
-.card { background:#f5f5f5; padding:15px; border-radius:10px; }
-button { width:100%; padding:12px; margin-top:10px; font-size:16px; }
-</style>
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            margin: 0; 
+            background: linear-gradient(rgba(5, 10, 20, 0.8), rgba(5, 10, 20, 0.9)), 
+                        url('https://raw.githubusercontent.com/fareast1074/inventory/main/background.jpg');
+            background-size: cover; background-position: center; background-attachment: fixed;
+            color: #ccd6f6; overflow-x: hidden; 
+        }
+        
+        #loginOverlay { 
+            position: fixed; inset: 0; 
+            background: linear-gradient(rgba(5, 10, 20, 0.6), rgba(5, 10, 20, 0.8)), 
+                        url('https://raw.githubusercontent.com/fareast1074/inventory/main/inventory.jpg');
+            background-size: cover; background-position: center;
+            display: flex; align-items: center; justify-content: center; z-index: 1000; 
+        }
+
+        #loginOverlay::before {
+            content: ""; position: absolute; width: 200%; height: 200%; top: -50%; left: -50%;
+            background-image: linear-gradient(var(--primary-glow) 1px, transparent 1px), linear-gradient(90deg, var(--primary-glow) 1px, transparent 1px);
+            background-size: 60px 60px; transform: perspective(500px) rotateX(60deg);
+            animation: gridMove 12s linear infinite; opacity: 0.2;
+        }
+
+        @keyframes gridMove {
+            from { transform: perspective(500px) rotateX(60deg) translateY(0); }
+            to { transform: perspective(500px) rotateX(60deg) translateY(60px); }
+        }
+
+        .login-card { 
+            position: relative; background: rgba(10, 25, 47, 0.7); backdrop-filter: blur(15px); 
+            padding: 40px; border-radius: 20px; width: 320px; text-align: center; 
+            border: 1px solid rgba(0, 229, 255, 0.3); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+
+        .scanner-line {
+            position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+            background: var(--primary); box-shadow: 0 0 15px var(--primary);
+            animation: scanMove 4s linear infinite; opacity: 0.6;
+        }
+        @keyframes scanMove { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+
+        .glitch-title { color: var(--primary); font-size: 1.4em; letter-spacing: 4px; margin-bottom: 25px; font-weight: bold; }
+
+        .login-card input, .filter-panel input, .filter-panel select {
+            width: 100%; padding: 12px; margin-bottom: 15px; background: rgba(0,0,0,0.5);
+            border: 1px solid #233554; border-radius: 4px; color: white; box-sizing: border-box; outline: none;
+        }
+
+        .btn-init {
+            background: transparent; color: var(--primary); border: 1px solid var(--primary);
+            width: 100%; padding: 14px; font-weight: bold; cursor: pointer; transition: 0.3s;
+        }
+        .btn-init:hover { background: var(--primary); color: #000; box-shadow: 0 0 20px var(--primary); }
+
+        #mainApp { display: none; padding: 20px; max-width: 1100px; margin: 0 auto; min-height: 100vh; }
+
+        .progress-container {
+            background: rgba(17, 34, 64, 0.8); border-radius: 12px; padding: 15px;
+            margin-bottom: 20px; border: 1px solid #233554;
+        }
+        .progress-meta { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.85em; font-weight: bold; }
+        .progress-bg { background: #0a192f; height: 14px; border-radius: 7px; overflow: hidden; border: 1px solid #233554; }
+        #progressBar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), #00b8d4); transition: width 0.5s ease; }
+
+        .filter-panel {
+            display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px;
+            background: rgba(17, 34, 64, 0.8); padding: 15px; border-radius: 12px;
+            border: 1px solid var(--primary-glow); margin-bottom: 20px;
+        }
+        .filter-panel input, .filter-panel select { margin-bottom: 0; }
+
+        .stats-bar { display: flex; gap: 15px; margin-bottom: 15px; }
+        .stat-card { flex: 1; background: rgba(17, 34, 64, 0.8); padding: 10px; border-radius: 8px; border: 1px solid #233554; text-align: center; }
+        .stat-val { font-size: 1.4em; font-weight: bold; display: block; }
+        .stat-lbl { font-size: 0.7em; color: #8892b0; text-transform: uppercase; }
+
+        .table-container { background: var(--card-bg); border-radius: 12px; overflow-x: auto; border: 1px solid #233554; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85em; min-width: 950px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #233554; }
+        th { background: rgba(29, 45, 80, 0.9); color: var(--primary); }
+
+        /* Failure Highlighting Styles */
+        .row-fail { background: rgba(255, 23, 68, 0.15) !important; }
+        .status-pill { padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+        .pill-pass { background: rgba(0, 230, 118, 0.2); color: var(--success); border: 1px solid var(--success); }
+        .pill-fail { background: rgba(255, 23, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+
+        .section-header { color: var(--primary); font-size: 0.85em; margin: 20px 0 10px; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 10px; }
+        .section-header::after { content: ""; flex: 1; height: 1px; background: #233554; }
+
+        /* MODAL STYLES */
+        #qcModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+        .modal-content { 
+            background: #0d1b2a; 
+            padding: 25px; 
+            border-radius: 20px; 
+            width: 90%; 
+            max-width: 500px; 
+            border: 2px solid var(--primary); 
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.2);
+        }
+        
+        .audit-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 15px; }
+        .audit-field label { font-size: 0.65em; color: var(--primary); display: block; margin-bottom: 6px; text-transform: uppercase; font-weight: bold; }
+        .audit-field select { 
+            width: 100%; padding: 10px; background: #0d1b2a; color: white; border: 1px solid #3e4a59; border-radius: 6px; outline: none;
+        }
+
+        .btn-save {
+            background: var(--primary); color: #000; width: 100%; padding: 15px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; text-transform: uppercase; font-size: 1em;
+        }
+
+        #alertBanner {
+            position: fixed; top: -100px; left: 0; right: 0; background: var(--danger); color: white; 
+            padding: 20px; text-align: center; z-index: 3000; transition: 0.5s; font-weight: bold;
+        }
+        #alertBanner.show { top: 0; }
+        .btn-delete-row { background: rgba(255, 23, 68, 0.1); color: var(--danger); border: 1px solid var(--danger); padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+    </style>
 </head>
-
 <body>
 
-<h3>Equipment Scan</h3>
+    <div id="alertBanner">
+        ⚠️ DUPLICATE DETECTED: Scanned by <span id="prevPIC">-</span> at <span id="prevTime">-</span>
+    </div>
 
-<div class="card">
-    <input id="scan" placeholder="SCAN RESULT" style="width:100%;padding:10px">
+    <div id="loginOverlay">
+        <div class="login-card">
+            <div class="scanner-line"></div>
+            <div class="glitch-title">QC AUDIT SYSTEM</div>
+            <input type="text" id="username" placeholder="Auditor Name" autocomplete="off">
+            <input type="password" id="password" placeholder="Terminal Password">
+            <button class="btn-init" onclick="checkLogin()">[ INITIALIZE ]</button>
+        </div>
+    </div>
 
-    <label><input type="checkbox" id="due"> DUE</label><br>
-    <label><input type="checkbox" id="code"> EQUIPMENT CODE</label><br>
-    <label><input type="checkbox" id="location"> LOCATION</label><br>
+    <div id="mainApp">
+        <div style="display:flex; justify-content:space-between; margin-bottom:15px; background:rgba(10,25,47,0.8); padding:10px 20px; border-radius:10px; border:1px solid #233554;">
+            <span>User: <strong id="userDisp" style="color:var(--primary)">-</strong></span>
+            <button onclick="location.reload()" style="background:#233554; color:white; border:none; padding:5px 15px; border-radius:5px; cursor:pointer;">Logout</button>
+        </div>
 
-    <button onclick="confirm()">CONFIRM</button>
-    <button onclick="exportTXT()">EXPORT FILE</button>
-</div>
+        <div class="progress-container">
+            <div class="progress-meta">
+                <span id="progressLabel">AUDIT COMPLETION</span>
+                <span id="progressPercent">0% (0/0)</span>
+            </div>
+            <div class="progress-bg">
+                <div id="progressBar"></div>
+            </div>
+        </div>
 
-<script>
-let logData = [];
+        <div style="background:rgba(17, 34, 64, 0.8); border: 2px dashed var(--primary); padding:15px; border-radius:12px; margin-bottom:20px; text-align:center;">
+            <strong style="color:var(--primary)">STEP 1: LOAD MASTER CSV</strong><br>
+            <input type="file" id="masterFile" accept=".csv" onchange="loadMasterData(this)" style="margin-top:10px;">
+        </div>
 
-function confirm() {
+        <div class="section-header">Inventory Search & Filter</div>
+        <div id="filterZone" class="filter-panel">
+            <input type="text" id="globalSearch" placeholder="🔍 Search Code or Name..." oninput="updateDisplay()">
+            <select id="filterBuilding" onchange="updateDisplay()"><option value="">All Buildings</option></select>
+            <select id="filterProduction" onchange="updateDisplay()"><option value="">All Production</option></select>
+            <button onclick="resetFilters()" style="padding:0 15px; background:#233554; color:white; border:none; border-radius:4px; cursor:pointer;">Reset</button>
+        </div>
 
-    let due = document.getElementById("due").checked ? 1 : 0;
-    let code = document.getElementById("code").checked ? 1 : 0;
-    let location = document.getElementById("location").checked ? 1 : 0;
+        <div class="stats-bar">
+            <div class="stat-card"><span id="totalScans" class="stat-val">0</span><span class="stat-lbl">Filtered Scans</span></div>
+            <div class="stat-card" style="border-color: var(--danger);"><span id="totalFails" class="stat-val" style="color: var(--danger);">0</span><span class="stat-lbl">Failures Found</span></div>
+        </div>
 
-    let line =
-        "SCAN RESULT: " + scan.value +
-        " | DUE: " + due +
-        " | EQUIPMENT CODE: " + code +
-        " | LOCATION: " + location;
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <button onclick="toggleCamera()" style="flex:1; padding:15px; background:#6f42c1; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">📷 CAMERA SCAN</button>
+            <button onclick="exportToCSV()" style="flex:1; padding:15px; background:var(--success); color:#000; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">📥 DOWNLOAD REPORT</button>
+        </div>
 
-    logData.push(line);
+        <div id="reader"></div>
+        <input type="text" id="barcodeCollector" style="position: absolute; opacity: 0;" autocomplete="off">
 
-    alert("Saved:\n" + line);
+        <div class="section-header">Audit Logs (Recent)</div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr><th>Time</th><th>Code</th><th>Name</th><th>Auditor</th><th>Loc</th><th>Due</th><th>MSA</th><th>Remark</th><th>Action</th></tr>
+                </thead>
+                <tbody id="inventoryBody"></tbody>
+            </table>
+        </div>
 
-    scan.value = "";
-    due.checked = code.checked = location.checked = false;
-}
+        <div class="section-header">Pending Items (Unscanned)</div>
+        <div class="table-container" style="background: rgba(10, 25, 47, 0.4);">
+            <table>
+                <thead>
+                    <tr><th>Code</th><th>Name</th><th>Expected Loc</th><th>Expected Due</th><th>MSA Req</th></tr>
+                </thead>
+                <tbody id="pendingBody"></tbody>
+            </table>
+        </div>
+    </div>
 
-function exportTXT() {
-    if (logData.length === 0) {
-        alert("No data");
-        return;
-    }
+    <div id="qcModal">
+        <div class="modal-content">
+            <h2 style="color:var(--primary); margin-top:0; text-align:center; font-size: 1.2em;">AUDIT VERIFICATION</h2>
+            
+            <div id="modalDataBox" style="background: #0a192f; padding: 12px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #233554; font-size: 0.9em;">
+                </div>
 
-    let blob = new Blob([logData.join("\n")], { type: "text/plain" });
-    let a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "equipment_log.txt";
-    a.click();
-}
-</script>
+            <div class="audit-grid">
+                <div class="audit-field">
+                    <label>Location</label>
+                    <select id="qcLoc">
+                        <option value="CORRECT">CORRECT</option>
+                        <option value="WRONG">WRONG</option>
+                    </select>
+                </div>
+                <div class="audit-field">
+                    <label>Due Date</label>
+                    <select id="qcDue">
+                        <option value="VALID">VALID</option>
+                        <option value="EXPIRED">EXPIRED</option>
+                    </select>
+                </div>
+                <div class="audit-field">
+                    <label>MSA STICKER</label>
+                    <select id="qcMsa">
+                        <option value="YES">YES</option>
+                        <option value="NO">NO</option>
+                    </select>
+                </div>
+            </div>
 
+            <input type="text" id="qcRemark" style="width:100%; padding:12px; background:#0a192f; color:white; border:1px solid #233554; border-radius:8px; box-sizing:border-box; margin-bottom:10px;" placeholder="Optional remark...">
+            <button class="btn-save" onclick="submitQC()">SAVE AUDIT RECORD</button>
+        </div>
+    </div>
+
+    <script>
+        const AUTH_PASS = "1234";
+        let scanHistory = []; 
+        let masterDB = {}; 
+        let rawMasterRows = []; 
+        let currentItem = null;
+        let loggedInUser = "";
+        let html5QrCode = null;
+
+        function checkLogin() {
+            const u = document.getElementById('username').value;
+            if (u && document.getElementById('password').value === AUTH_PASS) {
+                loggedInUser = u;
+                document.getElementById('userDisp').innerText = u;
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.getElementById('mainApp').style.display = 'block';
+                initScannerInput();
+            } else { alert("Invalid Credentials"); }
+        }
+
+        function loadMasterData(input) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const rows = e.target.result.split(/\r?\n/).filter(row => row.trim() !== "");
+                masterDB = {}; bldgSet = new Set(); prodSet = new Set();
+                rawMasterRows = [];
+                
+                rows.forEach((row, i) => {
+                    const columns = row.split(',').map(s => s.trim());
+                    rawMasterRows.push(columns); 
+                    if (i === 0 || !columns[0]) return; 
+
+                    const fullLoc = columns[2] || "N/A";
+                    const locParts = fullLoc.split("-");
+                    const bldg = (locParts[0] || "N/A").trim();
+                    const prod = (locParts[1] || "N/A").trim();
+
+                    if(bldg !== "N/A") bldgSet.add(bldg);
+                    if(prod !== "N/A") prodSet.add(prod);
+
+                    masterDB[columns[0].toUpperCase()] = { 
+                        name: columns[1]||"UNKNOWN", loc: fullLoc, bldg: bldg, prod: prod, due: columns[3]||"N/A", msa: columns[4]||"N/A" 
+                    };
+                });
+                populateDropdowns(Array.from(bldgSet).sort(), Array.from(prodSet).sort());
+                updateDisplay();
+            };
+            reader.readAsText(input.files[0]);
+        }
+
+        function populateDropdowns(bldgs, prods) {
+            const b = document.getElementById('filterBuilding');
+            const p = document.getElementById('filterProduction');
+            b.innerHTML = '<option value="">All Buildings</option>';
+            p.innerHTML = '<option value="">All Production</option>';
+            bldgs.forEach(x => b.innerHTML += `<option value="${x}">${x}</option>`);
+            prods.forEach(x => p.innerHTML += `<option value="${x}">${x}</option>`);
+        }
+
+        function resetFilters() {
+            document.getElementById('globalSearch').value = "";
+            document.getElementById('filterBuilding').value = "";
+            document.getElementById('filterProduction').value = "";
+            updateDisplay();
+        }
+
+        function initScannerInput() {
+            const col = document.getElementById('barcodeCollector');
+            document.addEventListener('mousedown', (e) => { 
+                const isFilterZone = e.target.closest('#filterZone');
+                const isModal = e.target.closest('.modal-content');
+                const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT';
+                if (!isFilterZone && !isModal && !isInput) { setTimeout(() => col.focus(), 50); }
+            });
+            col.addEventListener('keypress', (e) => { 
+                if (e.key === 'Enter') { handleScannedCode(col.value.trim().toUpperCase()); col.value = ""; } 
+            });
+            col.focus();
+        }
+
+        function handleScannedCode(barcode) {
+            if (!barcode) return;
+            const existing = scanHistory.find(item => item.barcode === barcode);
+            if (existing) {
+                document.getElementById('prevPIC').innerText = existing.pic;
+                document.getElementById('prevTime').innerText = existing.time;
+                document.getElementById('alertBanner').classList.add('show');
+                setTimeout(() => document.getElementById('alertBanner').classList.remove('show'), 4000);
+                return;
+            }
+            const data = masterDB[barcode] || { name: "NOT IN DATABASE", loc: "N/A", bldg:"N/A", prod:"N/A", due: "N/A", msa: "N/A" };
+            currentItem = { barcode, ...data };
+            
+            document.getElementById('modalDataBox').innerHTML = `
+                <div style="display:flex; justify-content:space-between; margin:8px 0;"><span style="color:var(--primary)">Equipment Code:</span> <span style="color:white; font-weight:bold;">${currentItem.barcode}</span></div>
+                <div style="display:flex; justify-content:space-between; margin:4px 0;"><span style="color:var(--primary)">Equipment Name:</span> <span style="color:white; font-weight:bold;">${currentItem.name}</span></div>
+                <div style="border-top: 1px solid #233554; margin: 8px 0; padding-top: 8px;"></div>
+                <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Registered location:</span> <span style="color:white;">${currentItem.loc}</span></div>
+                <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Registered Due:</span> <span style="color:white;">${currentItem.due}</span></div>
+                <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">MSA:</span> <span style="color:white;">${currentItem.msa}</span></div>
+            `;
+            
+            document.getElementById('qcModal').style.display = 'flex';
+            // Set default values for quick saving
+            document.getElementById('qcLoc').value = "CORRECT";
+            document.getElementById('qcDue').value = "VALID";
+            document.getElementById('qcMsa').value = "YES";
+        }
+
+        function submitQC() {
+            const l = document.getElementById('qcLoc').value, d = document.getElementById('qcDue').value, m = document.getElementById('qcMsa').value;
+            
+            // Highlight row if any criteria fails or if code not in DB
+            const failed = (l === "WRONG" || d === "EXPIRED" || m === "" || currentItem.name === "NOT IN DATABASE");
+
+            scanHistory.unshift({
+                id: Date.now(), time: new Date().toLocaleTimeString(), barcode: currentItem.barcode, name: currentItem.name,
+                pic: loggedInUser, locRes: l, dueRes: d, msaRes: m, remark: document.getElementById('qcRemark').value || "-",
+                isFail: failed
+            });
+            
+            document.getElementById('qcModal').style.display = 'none';
+            document.getElementById('qcRemark').value = "";
+            updateDisplay();
+
+            // FIXED: Automatically refocus the scanner input for the next item
+            setTimeout(() => {
+                document.getElementById('barcodeCollector').focus();
+            }, 100);
+        }
+
+        function updateDisplay() {
+            const s = document.getElementById('globalSearch').value.toUpperCase();
+            const bf = document.getElementById('filterBuilding').value, pf = document.getElementById('filterProduction').value;
+            const allCodes = Object.keys(masterDB);
+            
+            const filteredTargetList = allCodes.filter(code => {
+                const item = masterDB[code];
+                return (!bf || item.bldg === bf) && (!pf || item.prod === pf);
+            });
+            const targetTotal = filteredTargetList.length;
+
+            const scannedInFilterCount = scanHistory.filter(h => {
+                const m = masterDB[h.barcode] || {};
+                return (!bf || m.bldg === bf) && (!pf || m.prod === pf);
+            }).length;
+
+            if (targetTotal > 0) {
+                const per = Math.min(100, Math.round((scannedInFilterCount / targetTotal) * 100));
+                document.getElementById('progressBar').style.width = per + "%";
+                document.getElementById('progressPercent').innerText = `${per}% (${scannedInFilterCount}/${targetTotal})`;
+                document.getElementById('progressLabel').innerText = bf ? `COMPLETION: BLDG ${bf}` : "TOTAL FACTORY COMPLETION";
+            }
+
+            const filteredScans = scanHistory.filter(h => {
+                const m = masterDB[h.barcode] || {};
+                const matchSearch = (h.barcode.includes(s) || h.name.toUpperCase().includes(s));
+                const matchFilt = (!bf || m.bldg === bf) && (!pf || m.prod === pf);
+                return matchSearch && matchFilt;
+            });
+            document.getElementById('totalScans').innerText = filteredScans.length;
+            document.getElementById('totalFails').innerText = filteredScans.filter(x => x.isFail).length;
+
+            document.getElementById('inventoryBody').innerHTML = filteredScans.map(i => `<tr class="${i.isFail ? 'row-fail' : ''}">
+                <td>${i.time}</td><td>${i.barcode}</td><td>${i.name}</td><td style="color:var(--primary)">${i.pic}</td>
+                <td><span class="status-pill ${i.locRes==='CORRECT'?'pill-pass':'pill-fail'}">${i.locRes}</span></td>
+                <td><span class="status-pill ${i.dueRes==='VALID'?'pill-pass':'pill-fail'}">${i.dueRes}</span></td>
+                <td><span class="status-pill ${i.msaRes==='YES'?'pill-pass':'pill-fail'}">${i.msaRes}</span></td>
+                <td>${i.remark}</td><td><button class="btn-delete-row" onclick="deleteRow(${i.id})">Del</button></td></tr>`).join('');
+
+            const scannedIds = new Set(scanHistory.map(x => x.barcode));
+            document.getElementById('pendingBody').innerHTML = filteredTargetList.filter(c => {
+                const item = masterDB[c];
+                return !scannedIds.has(c) && (c.includes(s) || item.name.toUpperCase().includes(s));
+            }).map(c => `<tr><td>${c}</td><td>${masterDB[c].name}</td><td>${masterDB[c].loc}</td><td>${masterDB[c].due}</td><td>${masterDB[c].msa}</td></tr>`).join('');
+        }
+
+        function deleteRow(id) { 
+            scanHistory = scanHistory.filter(x => x.id !== id); 
+            updateDisplay(); 
+            document.getElementById('barcodeCollector').focus();
+        }
+        
+        function exportToCSV() {
+            if (!rawMasterRows.length) return alert("Load Master first");
+            let csv = rawMasterRows.map((r, idx) => {
+                if (idx === 0) return [...r, "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"].join(",");
+                const s = scanHistory.find(h => h.barcode === r[0].toUpperCase());
+                return s ? [...r, "SCANNED", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark.replace(/,/g,";")].join(",") : [...r, "PENDING", "", "", "", "", "", ""].join(",");
+            });
+            const blob = new Blob([csv.join("\n")], {type:'text/csv'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = `Audit_${new Date().toLocaleDateString()}.csv`; a.click();
+        }
+
+        async function toggleCamera() {
+            const r = document.getElementById('reader');
+            if (!html5QrCode) {
+                r.style.display = "block";
+                html5QrCode = new Html5Qrcode("reader");
+                html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, (text) => {
+                    html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; handleScannedCode(text.toUpperCase()); });
+                });
+            } else { html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); }
+        }
+    </script>
 </body>
 </html>
